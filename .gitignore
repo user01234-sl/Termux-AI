@@ -1,0 +1,35 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Build files
+build/
+dist/
+*.egg-info/
+
+# Secrets and configuration
+.env
+.env.*
+*.key
+secrets.json
+
+# Conversation databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Offline AI models
+models/
+*.gguf
+
+# Temporary files
+*.log
+*.tmp
+
+# Editor files
+.vscode/
+.idea/
