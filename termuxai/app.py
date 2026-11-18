@@ -1,6 +1,7 @@
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
+from importlib.metadata import version, PackageNotFoundError
 
 from termuxai.core.config import load_config, save_config
 from termuxai.ui.menu import (
@@ -33,12 +34,16 @@ def show_coming_soon(feature):
 
 def run():
     settings = load_config()
+    try:
+        __version__ = version("termuxai")
+    except PackageNotFoundError:
+        __version__ = "unknown"
 
     while True:
         show_banner()
 
         console.print(
-            f"[dim]Version 0.3.5 | Mode: {settings['default_mode']}[/]\n"
+            f"[dim]Version {__version__} | Mode: {settings['default_mode']}[/]\n"
         )
 
         main_menu()
