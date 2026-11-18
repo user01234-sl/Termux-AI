@@ -39,7 +39,7 @@ Download TermuxAI:
 
 ```bash
 git clone https://github.com/user01234-sl/Termux-AI.git
-cd TermuxAI
+cd Termux-AI
 ```
 
 Install:
