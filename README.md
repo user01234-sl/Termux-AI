@@ -74,19 +74,15 @@ Conversation history is stored locally in `~/.local/share/termuxai/history.db`. 
 
 ## Offline AI
 
-TermuxAI uses llama.cpp and a GGUF language model.
+TermuxAI uses llama-cpp and a GGUF language model.
 
 The model is downloaded separately and is not included in the Git repository.
 
 By default, TermuxAI looks for the model at:
 
 ```text
-~/.local/share/termuxai/models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+~/.local/share/termuxai/models/
 ```
-
-You can override this path with the `TERMUXAI_MODEL_PATH` environment variable.
-For compatibility, TermuxAI also checks the older project-local `models/`
-directory.
 
 ### Model Manager
 
