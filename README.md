@@ -38,7 +38,7 @@ pkg install python git llama-cpp
 Download TermuxAI:
 
 ```bash
-git clone YOUR_REPOSITORY_URL
+git clone https://github.com/user01234-sl/Termux-AI.git
 cd TermuxAI
 ```
 
