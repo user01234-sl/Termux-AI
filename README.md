@@ -113,7 +113,7 @@ Your personal settings, conversation history and downloaded models are preserved
 
 ## Project Status
 
-Version: 0.3.5
+Version: 0.3.6
 
 Currently under development.
 
