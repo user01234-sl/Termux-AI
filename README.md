@@ -55,6 +55,9 @@ chmod +x install.sh
 termuxai
 ```
 
+> Menu preview 
+<img width="1080" height="2400" alt="Termux-AI main menu" src="https://github.com/user-attachments/assets/6dce4845-0ee4-4458-8d74-7415690f2508" />
+
 ## Online AI security
 
 - Remote API endpoints must use HTTPS.
@@ -73,6 +76,9 @@ Keep your API key private. Do not share `~/.config/termuxai/secrets.json` or pas
 Conversation history is stored locally in `~/.local/share/termuxai/history.db`. Use the Conversation History screen's `D` option to delete all saved conversations. Deletion uses SQLite secure-delete and database compaction where supported, but cannot guarantee forensic erasure from flash storage or backups. Turn off `Save conversation history` in Configuration to prevent future chats from being saved.
 
 ## Offline AI
+
+> Offline chat
+<img width="1080" height="2400" alt="Termux-AI offline chat" src="https://github.com/user-attachments/assets/d76bc25a-3de4-45de-bea9-0e18752ec5af" />
 
 TermuxAI uses llama-cpp and a GGUF language model.
 
@@ -123,7 +129,10 @@ Designed specifically for Android phones running Termux (ARM64).
 
 ## License
 
-To be decided.
+Termux-AI is licensed under the
+GNU General Public License v3.0.
+
+See [LICENSE](LICENSE) for details.
 
 
 ### Importing existing models
