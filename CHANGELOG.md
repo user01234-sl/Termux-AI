@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0] - Lightweight installation and usability
+
+- Made llama.cpp optional during installation; online AI is the default.
+- Added `--with-offline` to install the optional local inference engine.
+- Documented how to add offline support after installation.
+- Replaced animated connection indicators with simple status text.
+- Removed a redundant active-model lookup before starting offline AI.
+
+
 ## 0.3.1
 
 - Added `httpx` as an explicit runtime dependency for online and offline API calls.

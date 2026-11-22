@@ -34,15 +34,15 @@ def test_connection(settings):
     )
 
     try:
-        with console.status("[cyan]Testing connection...[/]"):
-            response = "".join(
-                provider.chat([
-                    {
-                        "role": "user",
-                        "content": "Reply with OK."
-                    }
-                ])
-            )
+        console.print("[cyan]Testing connection...[/]")
+        response = "".join(
+            provider.chat([
+                {
+                    "role": "user",
+                    "content": "Reply with OK."
+                }
+            ])
+        )
 
         if response.strip():
             # Do not display arbitrary provider output during a connection test.

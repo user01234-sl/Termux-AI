@@ -11,7 +11,7 @@ requirements = [
 
 setup(
     name="termuxai",
-    version="0.3.6",
+    version="0.4.0",
     description="An AI client for Termux",
     packages=find_packages(),
     install_requires=requirements,

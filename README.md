@@ -29,11 +29,13 @@ Update Termux:
 pkg update && pkg upgrade
 ```
 
-Install dependencies:
+Install the basic dependencies:
 
 ```bash
-pkg install python git llama-cpp
+pkg install python git
 ```
+
+`llama-cpp` is optional. Install it only if you want to run local GGUF models.
 
 Download TermuxAI:
 
@@ -47,6 +49,19 @@ Install:
 ```bash
 chmod +x install.sh
 ./install.sh
+```
+
+The default installation supports online AI and does not install the local
+inference engine. To install offline AI support too, use:
+
+```bash
+./install.sh --with-offline
+```
+
+You can also add offline support later:
+
+```bash
+pkg install llama-cpp
 ```
 
 ## Launch
@@ -119,7 +134,7 @@ Your personal settings, conversation history and downloaded models are preserved
 
 ## Project Status
 
-Version: 0.3.6
+Version: 0.4.0
 
 Currently under development.
 

@@ -67,12 +67,9 @@ def run_chat(provider, title, mode, settings):
             response_parts = []
 
             try:
-                with console.status(
-                    "[dim]Connecting...[/]",
-                    spinner="dots"
-                ):
-                    stream = provider.chat(messages)
-                    first_chunk = next(stream, None)
+                console.print("[dim]Connecting...[/]")
+                stream = provider.chat(messages)
+                first_chunk = next(stream, None)
 
                 if first_chunk is None:
                     console.print(
@@ -182,7 +179,6 @@ def offline_chat(settings):
             )
         )
 
-        model_config = get_active_model_config()
         console.print(f"[dim]Model: {model_config['name']}[/]")
         process = start_server(model_config)
 
