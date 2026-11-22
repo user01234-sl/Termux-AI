@@ -9,7 +9,7 @@ Use online AI providers through API endpoints or run a local language model usin
 - Interactive terminal menu
 - Online AI support
 - Offline AI support
-- GGUF model manager with HTTPS downloads and per-model llama.cpp settings
+- GGUF model manager with HTTPS downloads, optional SHA-256 verification and per-model llama.cpp settings
 - Conversation history
 - Configurable settings
 - Rich terminal interface
@@ -78,7 +78,7 @@ termuxai
 - Remote API endpoints must use HTTPS.
 - Plain HTTP is accepted only for loopback addresses such as `localhost` and `127.0.0.1` (used by the local Offline AI server).
 - API keys are stored separately from general settings, with owner-only file and directory permissions where the platform supports them.
-- API redirects are not followed, and provider error bodies are not printed.
+- API redirects are not followed, provider error bodies are not printed, and request/stream response sizes are bounded.
 - The SQLite conversation-history directory and database use owner-only permissions where supported.
 - Saved conversation history can be deleted from the Conversation History screen.
 - Connection tests do not display arbitrary text returned by the provider.
@@ -86,6 +86,10 @@ termuxai
 - Secret, configuration, model-catalogue, local-server-log and history files reject symbolic links and use no-follow protections where the platform supports them.
 - Private storage directories reject symbolic links; the SQLite database is created with owner-only permissions before SQLite opens it.
 - Configuration values are type-checked and bounded when loaded.
+- Model downloads follow only credential-free HTTPS redirects, validate the GGUF magic header, enforce size limits, and use atomic no-overwrite promotion. Downloads and imports must begin with the
+GGUF magic header; this is a format sanity check, not a full model safety scan.
+- Optional SHA-256 verification checks downloaded models against a checksum obtained independently from a trusted publisher source.
+- Online chat requests and streamed server-sent events have size, message-count and per-message limits.
 - AI responses, saved messages and model names are displayed as untrusted terminal text; terminal control characters and bidirectional overrides are removed.
 - Local llama.cpp logs use owner-only permissions where supported and raw log contents are not printed in error messages.
 - Conversation-history save errors use generic messages instead of exposing raw exception details.
@@ -121,9 +125,13 @@ requires HTTPS, limits a model download to 20 GB, and binds llama.cpp to
 `127.0.0.1` rather than exposing the local server to the network. The command
 is assembled as an argument list and is never executed through a shell.
 
-Use direct links to GGUF files. Some model hosting sites require accepting a
-license or signing in first; those sites may not provide a usable direct link.
-Check a model's source and license before downloading it. Ensure your phone has
+Use direct links to GGUF files. When the publisher provides a SHA-256 checksum,
+enter it during download to verify the file. Obtain the checksum independently
+from the publisher's trusted release page; a checksum supplied by the same
+untrusted download location does not establish authenticity. Some model hosting
+sites require accepting a license or signing in first; those sites may not
+provide a usable direct link. Check a model's source and license before
+downloading it. Ensure your phone has
 enough free storage and memory for the model you choose.
 
 ## Uninstallation
@@ -138,7 +146,7 @@ Your personal settings, conversation history and downloaded models are preserved
 
 ## Project Status
 
-Version: 0.4.1
+Version: 0.4.4
 
 Currently under development.
 

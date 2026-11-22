@@ -76,3 +76,18 @@
 - Added checks for missing files, unsupported extensions, empty files, oversized files and duplicate filenames.
 - Register imported models in the same catalogue as downloaded models, with the same per-model startup settings.
 - Added regression tests for successful copy imports and import validation.
+
+## [0.4.4] - Android portability fix
+
+- Replace hard-link-based model promotion with an exclusive destination reservation and atomic replacement. This avoids relying on `os.link`, which is unavailable in some Android/Termux Python builds, while preserving no-overwrite behavior.
+- Add regression tests for environments without `os.link` and for existing destination protection.
+
+## [0.4.4] - Security audit release
+
+- Added optional SHA-256 verification for downloaded GGUF models.
+- Validate GGUF magic bytes before importing or registering a downloaded model.
+- Follow model-download redirects manually and permit only credential-free HTTPS destinations.
+- Use unique temporary download files and atomic no-overwrite promotion.
+- Bound online chat request size, message count, individual message size, total streamed response size, and SSE event size.
+- Added security regression tests for checksum mismatch, invalid GGUF files, redirects, and oversized API traffic.
+- No new runtime dependencies.

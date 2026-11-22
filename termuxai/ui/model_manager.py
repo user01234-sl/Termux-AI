@@ -42,6 +42,11 @@ def _download():
     console.print("[dim]Use a direct HTTPS link to a .gguf file. Large downloads may take time.[/]")
     url = Prompt.ask("Model URL").strip()
     filename = Prompt.ask("Save as (filename.gguf)").strip()
+    console.print(
+        "[dim]Optional: enter the SHA-256 published by the model's trusted source. "
+        "Leave blank if no trusted checksum is available.[/]"
+    )
+    expected_sha256 = Prompt.ask("Expected SHA-256", default="").strip() or None
     task_state = {"task": None}
     with Progress("[progress.description]{task.description}", BarColumn(), DownloadColumn(), TransferSpeedColumn(), TimeRemainingColumn(), console=console) as progress:
         def report(current, total):
@@ -49,7 +54,16 @@ def _download():
                 task_state["task"] = progress.add_task("Downloading model", total=total)
             progress.update(task_state["task"], completed=current, total=total)
         try:
-            item = download_model(url, filename, report)
+            item = download_model(
+                url, filename, report, expected_sha256=expected_sha256
+            )
+        except ValueError as error:
+            console.print(
+                f"Download failed: {safe_terminal_text(error)}",
+                markup=False,
+                highlight=False,
+            )
+            return
         except Exception:
             console.print("Download failed. Check the HTTPS URL, connection, and available storage.")
             return

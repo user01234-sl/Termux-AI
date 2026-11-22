@@ -1,6 +1,7 @@
 """Secure local GGUF model catalogue and downloader."""
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -17,6 +18,32 @@ MODEL_DIR = DATA_DIR / "models"
 CATALOG_FILE = DATA_DIR / "models.json"
 MAX_MODEL_BYTES = 20 * 1024 ** 3
 CHUNK_SIZE = 1024 * 1024
+GGUF_MAGIC = b"GGUF"
+MAX_REDIRECTS = 5
+
+
+def _promote_no_replace(temporary, destination):
+    """Atomically install a completed file without overwriting an existing path.
+
+    Use O_EXCL to reserve the destination, then replace that reservation with
+    the completed temporary file. Unlike os.link(), this works on Android
+    builds where Python does not expose hard-link support.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    fd = os.open(str(destination), flags, 0o600)
+    try:
+        os.close(fd)
+        os.replace(str(temporary), str(destination))
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            destination.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def _secure_dir(path):
@@ -81,7 +108,7 @@ def load_catalog():
             if not isinstance(filename, str) or Path(filename).name != filename or not filename.lower().endswith(".gguf"):
                 continue
             path = MODEL_DIR / filename
-            if path.is_file():
+            if path.is_file() and not path.is_symlink():
                 valid.append({
                     "id": str(item.get("id", filename)),
                     "name": str(item.get("name", filename)),
@@ -110,14 +137,30 @@ def _valid_int(value, default, minimum, maximum):
 
 
 def validate_download_url(url):
-    if not isinstance(url, str) or len(url) > 8192:
+    if (
+        not isinstance(url, str)
+        or not url
+        or len(url) > 8192
+        or url != url.strip()
+        or any(char.isspace() or ord(char) < 32 for char in url)
+    ):
         raise ValueError("Enter a valid HTTPS model URL.")
-    parsed = urlsplit(url.strip())
-    if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
+    try:
+        parsed = urlsplit(url)
+        hostname = parsed.hostname
+        parsed.port  # Force validation of malformed ports.
+    except ValueError:
+        raise ValueError("Enter a valid HTTPS model URL.") from None
+    if (
+        parsed.scheme.lower() != "https"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
         raise ValueError("Model downloads require an HTTPS URL without embedded credentials.")
     if parsed.fragment:
         raise ValueError("URL fragments are not supported.")
-    return url.strip()
+    return url
 
 
 def safe_filename(filename):
@@ -129,6 +172,22 @@ def safe_filename(filename):
         raise ValueError("Choose a normal filename for the model.")
     return name
 
+
+
+def _validate_expected_sha256(value):
+    """Normalize an optional publisher-provided SHA-256 digest."""
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", value.strip()):
+        raise ValueError("Expected SHA-256 must contain exactly 64 hexadecimal characters.")
+    return value.strip().lower()
+
+
+def _validate_gguf_header(path):
+    """Check the GGUF magic before a file is added to the model library."""
+    with Path(path).open("rb") as handle:
+        if handle.read(4) != GGUF_MAGIC:
+            raise ValueError("The file does not have a valid GGUF header.")
 
 
 def _register_model(filename):
@@ -167,6 +226,7 @@ def import_model(source_path, progress_callback=None):
         raise ValueError("The selected model file is empty.")
     if size > MAX_MODEL_BYTES:
         raise ValueError("The model exceeds the 20 GB import limit.")
+    _validate_gguf_header(source)
 
     _secure_dir(MODEL_DIR)
     destination = MODEL_DIR / filename
@@ -194,7 +254,7 @@ def import_model(source_path, progress_callback=None):
             os.fsync(dst.fileno())
         if copied != size:
             raise ValueError("The model file changed during import; no model was added.")
-        os.replace(temporary, destination)
+        _promote_no_replace(temporary, destination)
         try:
             os.chmod(destination, 0o600)
         except OSError:
@@ -208,54 +268,105 @@ def import_model(source_path, progress_callback=None):
         temporary.unlink(missing_ok=True)
 
 
-def download_model(url, filename, progress_callback=None):
+def download_model(url, filename, progress_callback=None, expected_sha256=None):
+    """Download a GGUF model safely, optionally checking a trusted SHA-256 digest.
+
+    Redirects are followed manually and only to credential-free HTTPS URLs.
+    The downloaded file is validated before it is promoted into the model library.
+    """
     url = validate_download_url(url)
+    expected_digest = _validate_expected_sha256(expected_sha256)
     filename = safe_filename(filename)
     _secure_dir(MODEL_DIR)
     destination = MODEL_DIR / filename
-    if destination.exists():
+    if destination.exists() or destination.is_symlink():
         raise FileExistsError("A model with that filename already exists.")
-    temporary = MODEL_DIR / (filename + ".part")
-    if temporary.exists():
-        temporary.unlink()
 
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=".download-", suffix=".part", dir=str(MODEL_DIR)
+    )
+    temporary = Path(temporary_name)
     total = 0
+    digest = hashlib.sha256()
+    expected_size = None
+    current_url = url
+
     try:
         timeout = httpx.Timeout(connect=20, read=60, write=30, pool=10)
-        with httpx.Client(timeout=timeout, follow_redirects=True, max_redirects=5, trust_env=False) as client:
-            with client.stream("GET", url, headers={"User-Agent": "TermuxAI/0.3.5"}) as response:
-                response.raise_for_status()
-                final = urlsplit(str(response.url))
-                if final.scheme != "https":
-                    raise ValueError("The download redirected to a non-HTTPS address; download cancelled.")
-                length = response.headers.get("content-length")
-                expected = int(length) if length and length.isdigit() else None
-                if expected is not None and expected > MAX_MODEL_BYTES:
-                    raise ValueError("The model exceeds the 20 GB download limit.")
-                flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                fd = os.open(str(temporary), flags, 0o600)
-                with os.fdopen(fd, "wb") as handle:
-                    for chunk in response.iter_bytes(CHUNK_SIZE):
-                        if not chunk:
-                            continue
-                        total += len(chunk)
-                        if total > MAX_MODEL_BYTES:
-                            raise ValueError("The model exceeds the 20 GB download limit.")
-                        handle.write(chunk)
-                        if progress_callback:
-                            progress_callback(total, expected)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-        if total == 0:
-            raise ValueError("The server returned an empty file.")
-        if expected is not None and total != expected:
-            raise ValueError("The download was incomplete. The partial file was discarded.")
-        os.replace(temporary, destination)
+        with httpx.Client(
+            timeout=timeout,
+            follow_redirects=False,
+            max_redirects=0,
+            trust_env=False,
+        ) as client:
+            for redirect_count in range(MAX_REDIRECTS + 1):
+                with client.stream(
+                    "GET",
+                    current_url,
+                    headers={"User-Agent": "TermuxAI/0.4.4"},
+                ) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("location")
+                        if not location or redirect_count >= MAX_REDIRECTS:
+                            raise ValueError("The model download used an invalid or excessive redirect.")
+                        from urllib.parse import urljoin
+                        current_url = validate_download_url(urljoin(current_url, location))
+                        continue
+
+                    if response.status_code != 200:
+                        raise ValueError("The model server returned an unexpected HTTP status.")
+                    final_url = validate_download_url(str(response.url))
+                    if final_url != current_url:
+                        raise ValueError("The download destination changed unexpectedly.")
+
+                    length = response.headers.get("content-length")
+                    expected_size = int(length) if length and length.isdigit() else None
+                    if expected_size is not None and (
+                        expected_size <= 0 or expected_size > MAX_MODEL_BYTES
+                    ):
+                        raise ValueError("The model exceeds the 20 GB download limit.")
+
+                    handle = os.fdopen(fd, "wb")
+                    fd = None
+                    with handle:
+                        header = bytearray()
+                        for chunk in response.iter_bytes(CHUNK_SIZE):
+                            if not chunk:
+                                continue
+                            if len(header) < 4:
+                                header.extend(chunk[:4 - len(header)])
+                            total += len(chunk)
+                            if total > MAX_MODEL_BYTES:
+                                raise ValueError("The model exceeds the 20 GB download limit.")
+                            digest.update(chunk)
+                            handle.write(chunk)
+                            if progress_callback:
+                                progress_callback(total, expected_size)
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    if total == 0:
+                        raise ValueError("The server returned an empty file.")
+                    if bytes(header) != GGUF_MAGIC:
+                        raise ValueError("The downloaded file does not have a valid GGUF header.")
+                    if expected_size is not None and total != expected_size:
+                        raise ValueError("The download was incomplete. The partial file was discarded.")
+                    if expected_digest and not hmac.compare_digest(
+                        digest.hexdigest(), expected_digest
+                    ):
+                        raise ValueError("The downloaded model SHA-256 does not match the expected value.")
+                    break
+            else:
+                raise ValueError("The model download exceeded the redirect limit.")
+
+        _promote_no_replace(temporary, destination)
         try:
             os.chmod(destination, 0o600)
         except OSError:
             pass
+
     except Exception:
+        if fd is not None:
+            os.close(fd)
         temporary.unlink(missing_ok=True)
         raise
 

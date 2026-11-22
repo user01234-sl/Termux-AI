@@ -36,6 +36,27 @@ class ModelManagerTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 manager.safe_filename(name)
 
+    def test_promotion_does_not_require_os_link(self):
+        self.models.mkdir(parents=True)
+        temporary = self.models / ".ready.part"
+        destination = self.models / "ready.gguf"
+        temporary.write_bytes(b"GGUF model")
+        with patch.object(manager.os, "link", None, create=True):
+            manager._promote_no_replace(temporary, destination)
+        self.assertEqual(destination.read_bytes(), b"GGUF model")
+        self.assertFalse(temporary.exists())
+
+    def test_promotion_never_overwrites_existing_destination(self):
+        self.models.mkdir(parents=True)
+        temporary = self.models / ".ready.part"
+        destination = self.models / "ready.gguf"
+        temporary.write_bytes(b"new model")
+        destination.write_bytes(b"existing model")
+        with self.assertRaises(FileExistsError):
+            manager._promote_no_replace(temporary, destination)
+        self.assertEqual(destination.read_bytes(), b"existing model")
+        self.assertEqual(temporary.read_bytes(), b"new model")
+
     def test_catalog_round_trip_and_active_model(self):
         self.models.mkdir(parents=True)
         (self.models / "demo.gguf").write_bytes(b"gguf")

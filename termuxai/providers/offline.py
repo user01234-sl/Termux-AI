@@ -97,7 +97,7 @@ def get_active_model_config():
 
     model_path = MODEL_DIR / selected["filename"]
 
-    if not model_path.is_file():
+    if not model_path.is_file() or model_path.is_symlink():
         raise RuntimeError(
             f"Model file not found: {model_path}. "
             "Open Model Manager to check your model library."
@@ -133,9 +133,9 @@ def start_server(model_config=None):
 
     model_path = Path(model_config["path"])
 
-    if not model_path.is_file():
+    if not model_path.is_file() or model_path.is_symlink():
         raise RuntimeError(
-            f"Model file not found: {model_path}"
+            f"Model file not found or not a regular managed file: {model_path}"
         )
 
     command = [

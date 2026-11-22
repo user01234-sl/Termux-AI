@@ -51,6 +51,13 @@ def validate_base_url(base_url):
     return base_url.rstrip("/")
 
 
+MAX_REQUEST_BYTES = 2 * 1024 * 1024
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_SSE_LINE_BYTES = 256 * 1024
+MAX_MESSAGES = 100
+MAX_MESSAGE_BYTES = 1024 * 1024
+
+
 class OpenAICompatibleProvider:
     def __init__(self, base_url, api_key, model):
         self.base_url = validate_base_url(base_url)
@@ -58,9 +65,9 @@ class OpenAICompatibleProvider:
             raise APIError("The API key is not configured.")
         if not isinstance(model, str) or not model.strip():
             raise APIError("The model name is not configured.")
+        if len(model) > 256 or any(ord(char) < 32 for char in model):
+            raise APIError("The model name is invalid.")
 
-        # Keep the credential out of the default object representation. This
-        # helps prevent accidental disclosure in tracebacks and debug output.
         self._api_key = api_key
         self.model = model.strip()
 
@@ -79,15 +86,96 @@ class OpenAICompatibleProvider:
             return self.base_url
         return self.base_url + "/chat/completions"
 
+    @staticmethod
+    def _prepare_payload(messages, model):
+        if not isinstance(messages, list) or not messages or len(messages) > MAX_MESSAGES:
+            raise APIError("The conversation contains an invalid number of messages.")
+
+        for message in messages:
+            if not isinstance(message, dict):
+                raise APIError("The conversation contains an invalid message.")
+            if message.get("role") not in ("system", "user", "assistant"):
+                raise APIError("The conversation contains an unsupported message role.")
+            content = message.get("content")
+            if not isinstance(content, str):
+                raise APIError("A conversation message is too large or invalid.")
+            try:
+                content_size = len(content.encode("utf-8"))
+            except UnicodeError:
+                raise APIError("A conversation message contains invalid text.") from None
+            if content_size > MAX_MESSAGE_BYTES:
+                raise APIError("A conversation message is too large or invalid.")
+
+        payload = {"model": model, "messages": messages, "stream": True}
+        try:
+            body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        except (TypeError, ValueError, UnicodeError):
+            raise APIError("The conversation could not be encoded safely.") from None
+
+        if len(body) > MAX_REQUEST_BYTES:
+            raise APIError("The conversation is too large to send.")
+        return body
+
+    @staticmethod
+    def _iter_content(response):
+        total = 0
+        buffer = bytearray()
+        declared_length = response.headers.get("content-length")
+        if declared_length and declared_length.isdigit() and int(declared_length) > MAX_RESPONSE_BYTES:
+            raise APIError("The API response exceeded the size limit.")
+
+        for chunk in response.iter_bytes(chunk_size=64 * 1024):
+            total += len(chunk)
+            if total > MAX_RESPONSE_BYTES:
+                raise APIError("The API response exceeded the size limit.")
+            buffer.extend(chunk)
+
+            while True:
+                newline = buffer.find(b"\n")
+                if newline < 0:
+                    if len(buffer) > MAX_SSE_LINE_BYTES:
+                        raise APIError("The API response contained an oversized event.")
+                    break
+
+                if newline > MAX_SSE_LINE_BYTES:
+                    raise APIError("The API response contained an oversized event.")
+                line = bytes(buffer[:newline]).rstrip(b"\r")
+                del buffer[:newline + 1]
+
+                if not line.startswith(b"data:"):
+                    continue
+                data = line[5:].strip()
+                if data == b"[DONE]":
+                    return
+                try:
+                    event = json.loads(data.decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+
+                if not isinstance(event, dict):
+                    continue
+                choices = event.get("choices")
+                if not isinstance(choices, list) or not choices:
+                    continue
+                first_choice = choices[0]
+                if not isinstance(first_choice, dict):
+                    continue
+                delta = first_choice.get("delta")
+                if not isinstance(delta, dict):
+                    continue
+                content = delta.get("content")
+                if isinstance(content, str):
+                    yield content
+
+        if buffer and len(buffer) > MAX_SSE_LINE_BYTES:
+            raise APIError("The API response contained an oversized event.")
+
     def chat(self, messages):
+        body = self._prepare_payload(messages, self.model)
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
-        }
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": True,
+            "Accept": "text/event-stream",
         }
         timeout = httpx.Timeout(connect=10.0, read=90.0, write=30.0, pool=10.0)
 
@@ -101,48 +189,15 @@ class OpenAICompatibleProvider:
                     "POST",
                     self.get_endpoint(),
                     headers=headers,
-                    json=payload,
+                    content=body,
                 ) as response:
                     if response.status_code >= 400:
-                        # Do not print provider response bodies: they can contain
-                        # account details, request data, or reflected credentials.
-                        raise APIError(
-                            f"The API returned HTTP {response.status_code}."
-                        )
-
-                    for line in response.iter_lines():
-                        if not line.startswith("data:"):
-                            continue
-
-                        data = line[5:].strip()
-                        if data == "[DONE]":
-                            break
-
-                        try:
-                            event = json.loads(data)
-                        except json.JSONDecodeError:
-                            continue
-
-                        if not isinstance(event, dict):
-                            continue
-                        choices = event.get("choices", [])
-                        if not isinstance(choices, list) or not choices:
-                            continue
-
-                        first_choice = choices[0]
-                        if not isinstance(first_choice, dict):
-                            continue
-                        delta = first_choice.get("delta", {})
-                        if not isinstance(delta, dict):
-                            continue
-                        content = delta.get("content")
-                        if isinstance(content, str):
-                            yield content
+                        raise APIError(f"The API returned HTTP {response.status_code}.")
+                    yield from self._iter_content(response)
 
         except APIError:
             raise
         except httpx.TimeoutException:
             raise APIError("The API request timed out.") from None
         except httpx.HTTPError:
-            # Avoid displaying raw exceptions, which can include full URLs.
             raise APIError("A network error occurred while contacting the API.") from None
