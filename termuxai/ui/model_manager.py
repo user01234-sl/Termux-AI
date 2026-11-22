@@ -6,11 +6,14 @@ from rich.console import Console
 from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
+from rich.text import Text
 
 from termuxai.models.manager import (
     MODEL_DIR, load_catalog, download_model, import_model, set_active_model,
     update_model_settings, delete_model,
 )
+
+from termuxai.ui.safe_output import safe_terminal_text
 
 console = Console()
 
@@ -27,7 +30,7 @@ def _show_models(catalog):
         size = path.stat().st_size / (1024 ** 3) if path.exists() else 0
         table.add_row(
             "*" if item["id"] == catalog["active_model"] else "",
-            item["name"],
+            Text(safe_terminal_text(item["name"])),
             f"{size:.2f} GB",
             str(item["context_size"]),
             str(item["port"]),
@@ -47,10 +50,13 @@ def _download():
             progress.update(task_state["task"], completed=current, total=total)
         try:
             item = download_model(url, filename, report)
-        except Exception as error:
-            console.print(f"[red]Download failed: {error}[/]")
+        except Exception:
+            console.print("Download failed. Check the HTTPS URL, connection, and available storage.")
             return
-    console.print(f"[green]Downloaded and registered: {item['name']}[/]")
+    console.print(
+        f"Downloaded and registered: {safe_terminal_text(item['name'])}",
+        markup=False, highlight=False,
+    )
 
 
 def _import():
@@ -58,13 +64,19 @@ def _import():
     source = Prompt.ask("Path to .gguf model file").strip()
     try:
         item = import_model(source)
-        console.print(f"[green]Imported and registered: {item['name']}[/]")
+        console.print(
+            f"Imported and registered: {safe_terminal_text(item['name'])}",
+            markup=False, highlight=False,
+        )
     except (OSError, ValueError, FileExistsError) as error:
-        console.print(f"[red]Import failed: {error}[/]")
+        console.print(f"Import failed: {safe_terminal_text(error)}", markup=False, highlight=False)
 
 
 def _configure(item):
-    console.print(f"\n[bold]Settings for {item['name']}[/]")
+    console.print(
+        f"Settings for {safe_terminal_text(item['name'])}",
+        markup=False, highlight=False,
+    )
     console.print("Enter 0 for automatic thread count or no GPU offload.")
     context = IntPrompt.ask("Context size", default=item["context_size"])
     port = IntPrompt.ask("Server port", default=item["port"])
@@ -110,7 +122,10 @@ def model_manager():
                 console.print("[yellow]Import or download a model first.[/]")
             else:
                 for index, item in enumerate(catalog["models"], 1):
-                    console.print(f"{index}. {item['name']}")
+                    console.print(
+                        f"{index}. {safe_terminal_text(item['name'])}",
+                        markup=False, highlight=False,
+                    )
                 index = IntPrompt.ask("Model number", default=1)
                 if not 1 <= index <= len(catalog["models"]):
                     console.print("[red]Invalid model number.[/]")
@@ -118,7 +133,10 @@ def model_manager():
                     item = catalog["models"][index - 1]
                     if choice == "3":
                         set_active_model(item["id"])
-                        console.print(f"[green]{item['name']} is now active.[/]")
+                        console.print(
+                            f"{safe_terminal_text(item['name'])} is now active.",
+                            markup=False, highlight=False,
+                        )
                     elif choice == "4":
                         _configure(item)
                     elif choice == "5":
@@ -130,7 +148,10 @@ def model_manager():
                         console.print("[bold]Startup command (arguments are safely passed without a shell):[/]")
                         console.print(" ".join(repr(part) for part in command))
                     elif choice == "6":
-                        if Confirm.ask(f"Delete {item['name']} and its model file?", default=False):
+                        if Confirm.ask(
+                            "Delete the selected model and its model file?",
+                            default=False,
+                        ):
                             try:
                                 delete_model(item["id"])
                                 console.print("[green]Model deleted.[/]")

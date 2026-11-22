@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.1] - Security hardening
+
+- Refuse symbolic links for API-key, configuration, model-catalogue, local-server-log and SQLite history files where supported.
+- Refuse symbolic links for private model/configuration/history/log directories.
+- Create/open the SQLite history database with owner-only permissions before SQLite writes.
+- Sanitize AI responses, history content and model names before terminal display to prevent markup/control-character spoofing.
+- Validate configuration types, allowed modes and string lengths when loading or saving settings.
+- Avoid printing raw model-download exceptions that may contain sensitive URLs.
+- Add security regression tests for symlink handling, terminal text sanitization and configuration validation.
+
 ## [0.4.0] - Lightweight installation and usability
 
 - Made llama.cpp optional during installation; online AI is the default.

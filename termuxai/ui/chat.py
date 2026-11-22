@@ -2,6 +2,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
+from rich.text import Text
 
 from termuxai.providers.openai_compatible import (
     OpenAICompatibleProvider,
@@ -13,6 +14,7 @@ from termuxai.providers.offline import (
     get_active_model_config
 )
 from termuxai.security.secrets import get_api_key
+from termuxai.ui.safe_output import safe_terminal_text
 from termuxai.core.history import (
     init_db,
     create_conversation,
@@ -79,11 +81,11 @@ def run_chat(provider, title, mode, settings):
                     continue
 
                 response_parts.append(first_chunk)
-                console.print(first_chunk, end="")
+                console.print(safe_terminal_text(first_chunk), end="", markup=False, highlight=False)
 
                 for chunk in stream:
                     response_parts.append(chunk)
-                    console.print(chunk, end="")
+                    console.print(safe_terminal_text(chunk), end="", markup=False, highlight=False)
 
                 console.print()
 
@@ -173,13 +175,18 @@ def offline_chat(settings):
 
         console.print(
             Panel(
-            "[bold cyan]Starting Offline AI...[/]\n"
-            f"[dim]Loading {model_config['name']} on your device.[/]",
-            border_style="cyan"
+                Text(
+                    "Starting Offline AI...\n"
+                    f"Loading {safe_terminal_text(model_config['name'])} on your device."
+                ),
+                border_style="cyan",
             )
         )
 
-        console.print(f"[dim]Model: {model_config['name']}[/]")
+        console.print(
+            f"Model: {safe_terminal_text(model_config['name'])}",
+            markup=False, highlight=False,
+        )
         process = start_server(model_config)
 
         provider = OpenAICompatibleProvider(
@@ -196,7 +203,11 @@ def offline_chat(settings):
         )
 
     except (RuntimeError, OSError) as error:
-        console.print(f"\n[red]Offline AI error: {error}[/]")
+        console.print(
+            f"Offline AI error: {safe_terminal_text(error)}",
+            markup=False,
+            highlight=False,
+        )
         Prompt.ask("Press Enter to return", default="")
 
     finally:
@@ -240,8 +251,8 @@ def conversation_history(settings):
             table.add_row(
                 str(index),
                 str(item["id"]),
-                item["mode"].capitalize(),
-                updated
+                Text(safe_terminal_text(item["mode"]).capitalize()),
+                Text(safe_terminal_text(updated)),
             )
 
         console.print(table)
@@ -287,9 +298,11 @@ def conversation_history(settings):
 
         console.print(
             Panel(
-                f"[bold cyan]Chat ID: {conversation['id']}[/]\n"
-                f"[dim]Mode: {conversation['mode'].capitalize()}[/]",
-                border_style="cyan"
+                Text(
+                    f"Chat ID: {conversation['id']}\n"
+                    f"Mode: {safe_terminal_text(conversation['mode']).capitalize()}"
+                ),
+                border_style="cyan",
             )
         )
 
@@ -304,11 +317,13 @@ def conversation_history(settings):
             else:
                 console.print("\n[bold cyan]AI[/]")
 
-            console.print(message["content"])
+            console.print(safe_terminal_text(message["content"]), markup=False, highlight=False)
 
             if settings["show_timestamps"]:
                 console.print(
-                    f"[dim]{message['timestamp'][:19].replace('T', ' ')}[/]"
+                    safe_terminal_text(message["timestamp"][:19].replace("T", " ")),
+                    markup=False,
+                    highlight=False,
                 )
 
         Prompt.ask("\nPress Enter to return to history", default="")

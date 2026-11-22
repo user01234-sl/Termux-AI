@@ -83,10 +83,14 @@ termuxai
 - Saved conversation history can be deleted from the Conversation History screen.
 - Connection tests do not display arbitrary text returned by the provider.
 - Provider object representations hide API keys to reduce accidental disclosure in debug output.
+- Secret, configuration, model-catalogue, local-server-log and history files reject symbolic links and use no-follow protections where the platform supports them.
+- Private storage directories reject symbolic links; the SQLite database is created with owner-only permissions before SQLite opens it.
+- Configuration values are type-checked and bounded when loaded.
+- AI responses, saved messages and model names are displayed as untrusted terminal text; terminal control characters and bidirectional overrides are removed.
 - Local llama.cpp logs use owner-only permissions where supported and raw log contents are not printed in error messages.
 - Conversation-history save errors use generic messages instead of exposing raw exception details.
 
-Keep your API key private. Do not share `~/.config/termuxai/secrets.json` or paste your key into screenshots, logs, or support messages. The key is stored as plaintext in a file protected by Android/Linux permissions; it is not encrypted by TermuxAI.
+Keep your API key private. Do not share `~/.config/termuxai/secrets.json` or paste your key into screenshots, logs, or support messages. The key is stored as plaintext in a file protected by Android/Linux permissions; it is not encrypted by TermuxAI. These protections help against other Android apps and accidental disclosure, but they do not protect secrets from a compromised device, a malicious process running as the same Android app user, or someone with access to your unlocked Termux environment.
 
 Conversation history is stored locally in `~/.local/share/termuxai/history.db`. Use the Conversation History screen's `D` option to delete all saved conversations. Deletion uses SQLite secure-delete and database compaction where supported, but cannot guarantee forensic erasure from flash storage or backups. Turn off `Save conversation history` in Configuration to prevent future chats from being saved.
 
@@ -134,7 +138,7 @@ Your personal settings, conversation history and downloaded models are preserved
 
 ## Project Status
 
-Version: 0.4.0
+Version: 0.4.1
 
 Currently under development.
 

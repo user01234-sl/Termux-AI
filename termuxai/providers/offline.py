@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import stat
 import time
 from pathlib import Path
 
@@ -51,25 +52,23 @@ def get_model_path():
 def _open_secure_server_log():
     """Open the server log with owner-only permissions."""
     SERVER_LOG.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        os.chmod(SERVER_LOG.parent, 0o700)
-    except OSError:
-        pass
+    if SERVER_LOG.parent.is_symlink() or not SERVER_LOG.parent.is_dir():
+        raise OSError("The server log directory must be a real directory.")
+    os.chmod(SERVER_LOG.parent, 0o700)
 
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-
-    if hasattr(os, "O_CLOEXEC"):
-        flags |= os.O_CLOEXEC
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NONBLOCK", 0)
+    if not getattr(os, "O_NOFOLLOW", 0) and SERVER_LOG.is_symlink():
+        raise OSError("The server log must not be a symbolic link.")
 
     fd = os.open(str(SERVER_LOG), flags, 0o600)
 
     try:
-        try:
-            os.fchmod(fd, 0o600)
-        except OSError:
-            pass
-
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("The server log must be a regular file.")
+        os.fchmod(fd, 0o600)
         return os.fdopen(fd, "w", encoding="utf-8")
 
     except Exception:

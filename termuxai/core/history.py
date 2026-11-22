@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import stat
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -13,24 +14,43 @@ MAX_MESSAGES = 50
 
 def _secure_data_dir():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if DATA_DIR.is_symlink() or not DATA_DIR.is_dir():
+        raise OSError("The history path must be a real directory.")
+    os.chmod(DATA_DIR, 0o700)
+
+
+def _prepare_database_file():
+    """Create/open the DB as an owner-only regular file, refusing symlinks."""
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDWR | nofollow
+    if not nofollow and DB_FILE.is_symlink():
+        raise OSError("The history database must not be a symbolic link.")
     try:
-        os.chmod(DATA_DIR, 0o700)
-    except OSError:
-        pass
+        fd = os.open(str(DB_FILE), flags | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        if not nofollow and DB_FILE.is_symlink():
+            raise OSError("The history database must not be a symbolic link.")
+        fd = os.open(str(DB_FILE), flags)
+
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("The history database is not a regular file.")
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
 
 
 def get_connection():
     _secure_data_dir()
+    _prepare_database_file()
 
-    connection = sqlite3.connect(DB_FILE)
+    connection = sqlite3.connect(DB_FILE, timeout=10)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA secure_delete = ON")
-    try:
-        os.chmod(DB_FILE, 0o600)
-    except OSError:
-        pass
-
+    # The containing directory is private, and the database is created 0600
+    # before SQLite can create its rollback journal.
+    os.chmod(DB_FILE, 0o600)
     return connection
 
 

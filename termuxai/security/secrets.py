@@ -1,5 +1,8 @@
+"""Owner-only storage for API credentials."""
+
 import json
 import os
+import stat
 import tempfile
 from pathlib import Path
 from getpass import getpass
@@ -9,10 +12,28 @@ SECRETS_FILE = Path.home() / ".config" / "termuxai" / "secrets.json"
 
 def _secure_directory():
     SECRETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if SECRETS_FILE.parent.is_symlink() or not SECRETS_FILE.parent.is_dir():
+        raise OSError("The secrets directory must be a real directory.")
+    os.chmod(SECRETS_FILE.parent, 0o700)
+
+
+def _open_secret_readonly():
+    """Open the secret without following a final-component symlink."""
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    elif SECRETS_FILE.is_symlink():
+        raise OSError("The secrets file must not be a symbolic link.")
+    fd = os.open(str(SECRETS_FILE), flags)
     try:
-        os.chmod(SECRETS_FILE.parent, 0o700)
-    except OSError:
-        pass
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError("The secrets file is not a regular file.")
+        os.fchmod(fd, 0o600)
+        return os.fdopen(fd, "r", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
 
 
 def save_api_key(api_key):
@@ -26,39 +47,26 @@ def save_api_key(api_key):
     temporary_file = Path(temporary_name)
 
     try:
-        try:
-            os.fchmod(fd, 0o600)
-        except OSError:
-            pass
+        os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as file:
             json.dump({"api_key": api_key.strip()}, file)
             file.write("\n")
             file.flush()
             os.fsync(file.fileno())
 
+        # os.replace replaces a destination symlink itself; it does not follow it.
         os.replace(temporary_file, SECRETS_FILE)
-        try:
-            os.chmod(SECRETS_FILE, 0o600)
-        except OSError:
-            pass
+        os.chmod(SECRETS_FILE, 0o600)
     finally:
-        try:
-            temporary_file.unlink()
-        except FileNotFoundError:
-            pass
+        temporary_file.unlink(missing_ok=True)
 
 
 def get_api_key():
     try:
         _secure_directory()
-        if not SECRETS_FILE.is_file():
+        if not SECRETS_FILE.exists() and not SECRETS_FILE.is_symlink():
             return ""
-        try:
-            os.chmod(SECRETS_FILE, 0o600)
-        except OSError:
-            pass
-
-        with SECRETS_FILE.open("r", encoding="utf-8") as file:
+        with _open_secret_readonly() as file:
             data = json.load(file)
 
         if not isinstance(data, dict):

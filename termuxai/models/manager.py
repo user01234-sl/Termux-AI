@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -20,10 +21,9 @@ CHUNK_SIZE = 1024 * 1024
 
 def _secure_dir(path):
     path.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(path, 0o700)
-    except OSError:
-        pass
+    if path.is_symlink() or not path.is_dir():
+        raise OSError("The model storage path must be a real directory.")
+    os.chmod(path, 0o700)
 
 
 def _atomic_json(path, data):
@@ -55,8 +55,22 @@ def load_catalog():
     if not CATALOG_FILE.exists():
         return {"active_model": None, "models": []}
     try:
-        with CATALOG_FILE.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        if not hasattr(os, "O_NOFOLLOW") and CATALOG_FILE.is_symlink():
+            raise OSError("The model catalogue must not be a symbolic link.")
+        fd = os.open(str(CATALOG_FILE), flags)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise OSError("The model catalogue is not a regular file.")
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
         if not isinstance(data, dict) or not isinstance(data.get("models"), list):
             raise ValueError("Invalid model catalogue")
         valid = []

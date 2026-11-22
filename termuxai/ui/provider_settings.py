@@ -13,6 +13,8 @@ from termuxai.providers.openai_compatible import (
     validate_base_url
 )
 
+from termuxai.ui.safe_output import safe_terminal_text
+
 console = Console()
 
 
@@ -52,7 +54,7 @@ def test_connection(settings):
             console.print("[yellow]Connected, but received an empty response.[/]")
 
     except APIError as error:
-        console.print(f"[red]Connection failed: {error}[/]")
+        console.print(f"Connection failed: {safe_terminal_text(error)}", markup=False, highlight=False)
 
 
 def provider_settings(settings, save_callback):
@@ -65,8 +67,14 @@ def provider_settings(settings, save_callback):
             )
         )
 
-        console.print(f"1. API endpoint: {settings['api_base_url'] or 'Not set'}")
-        console.print(f"2. Model: {settings['api_model'] or 'Not set'}")
+        console.print(
+            f"1. API endpoint: {safe_terminal_text(settings['api_base_url'] or 'Not set')}",
+            markup=False, highlight=False,
+        )
+        console.print(
+            f"2. Model: {safe_terminal_text(settings['api_model'] or 'Not set')}",
+            markup=False, highlight=False,
+        )
         console.print(f"3. API key: {'Configured' if get_api_key() else 'Not configured'}")
         console.print("4. Delete API key")
         console.print("5. Test connection")
