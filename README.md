@@ -146,9 +146,10 @@ Your personal settings, conversation history and downloaded models are preserved
 
 ## Project Status
 
-Version: 0.4.4
+Version: 1.0.0-rc1 (release candidate)
 
-Currently under development.
+The first stable release, v1.0.0, is being prepared. This release candidate is
+for testing and is not the stable release.
 
 ## Platform
 

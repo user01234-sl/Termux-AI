@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.0] - Not released
+
+The first stable release is in preparation. Changes will be listed here after
+release-candidate testing is complete.
+
 ## [0.4.1] - Security hardening
 
 - Refuse symbolic links for API-key, configuration, model-catalogue, local-server-log and SQLite history files where supported.
@@ -77,12 +82,10 @@
 - Register imported models in the same catalogue as downloaded models, with the same per-model startup settings.
 - Added regression tests for successful copy imports and import validation.
 
-## [0.4.4] - Android portability fix
+## [0.4.4] - Security audit and Android portability fixes
 
 - Replace hard-link-based model promotion with an exclusive destination reservation and atomic replacement. This avoids relying on `os.link`, which is unavailable in some Android/Termux Python builds, while preserving no-overwrite behavior.
 - Add regression tests for environments without `os.link` and for existing destination protection.
-
-## [0.4.4] - Security audit release
 
 - Added optional SHA-256 verification for downloaded GGUF models.
 - Validate GGUF magic bytes before importing or registering a downloaded model.
