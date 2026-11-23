@@ -146,10 +146,9 @@ Your personal settings, conversation history and downloaded models are preserved
 
 ## Project Status
 
-Version: 1.0.0-rc1 (release candidate)
+Version: 1.0.0 (stable)
 
-The first stable release, v1.0.0, is being prepared. This release candidate is
-for testing and is not the stable release.
+This is the first official stable release of TermuxAI.
 
 ## Platform
 

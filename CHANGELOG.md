@@ -1,9 +1,14 @@
 # Changelog
 
-## [1.0.0] - Not released
+## [1.0.0] - 2026-11-23
 
-The first stable release is in preparation. Changes will be listed here after
-release-candidate testing is complete.
+First official stable release.
+
+- Provide a lightweight AI client designed for Android phones running Termux (ARM64).
+- Use online AI by default, with optional local GGUF model support through llama.cpp.
+- Include provider configuration, conversation history, and model management.
+- Include security hardening for API requests, stored credentials, history, model downloads and terminal output.
+- Improve Android/Termux portability of model imports and downloads.
 
 ## [0.4.1] - Security hardening
 

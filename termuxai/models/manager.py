@@ -303,7 +303,7 @@ def download_model(url, filename, progress_callback=None, expected_sha256=None):
                 with client.stream(
                     "GET",
                     current_url,
-                    headers={"User-Agent": "TermuxAI/1.0.0rc1"},
+                    headers={"User-Agent": "TermuxAI/1.0.0"},
                 ) as response:
                     if response.status_code in (301, 302, 303, 307, 308):
                         location = response.headers.get("location")
